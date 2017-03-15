@@ -27,25 +27,34 @@ def filegrab():
     #convert to np and remove first two cols
     data = np.array(datalist)
     data = data[:,2:]
+    data = data.astype(float)
+
+    #convert to absolute positions
+    ab = 12.0251939
+    c  = 44.0420257 
+    data[:,:2] *=ab
+    data[:,2] *=c
 
     return data
 
 def gentable():
-    dj = filegrab()
-    #convert to float
-    dj = dj.astype(float)
+    cfile = filegrab()
+    
+    
     #setup blank table to populate
     table = np.zeros((1,8))
-    
-    for N_rowno in range(-2,0):
-        NitrogenAtm = dj[N_rowno]
-        print NitrogenAtm
+
+    #Calc NH bond lengths
+    for N_rowno in range(1,3):
+        NitrogenAtm = cfile[-(N_rowno)]
         
-        #calculate NH bond lengths
-        for rowno in range(6):
-            #grab hydrogen atom coords
-            hydrogenAtm = dj[rowno]
-            print hydrogenAtm
-            #(x0,y0,z0), (x1,y1,z1), d = sqrt( (x1-x0)^2 + (y1-y0)^2 + (z1-z0)^2 )
-            print hydrogenAtm[0]
-            #d = np.sqrt ( (hydrogenAtm[0]
+        #simple fix
+        if N_rowno == 1:
+            n = 3
+        else:
+            n = 0
+
+        hydrogenAtm = cfile[0+n:3+n]
+        d = (hydrogenAtm - NitrogenAtm)**2
+        d = np.sqrt(np.sum(d,axis=1))
+        print d
