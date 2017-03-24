@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import linecache
 
-
 #unit cell
 ab = 12.0251939
 c  = 44.0420257
@@ -22,159 +21,141 @@ def filegrabberCIF(angle):
                 first_line = line_no + 2
             linecounter += 1
         
-    #store lines in rows
-    rows = []
+    #store lines from file in data
+    data = []
 
     for line_no in range (first_line,linecounter+1):
         grabline = linecache.getline(cifout, line_no)
         grabline = grabline.split() #comma seperate
-        rows.append(grabline)
+        data.append(grabline)
     
     #convert to np
-    rows = np.array(rows)
-    return rows[:,:-2]
+    data = np.array(data)
+    return data[:,:-2]
 
 #default angles, angles must be entered as createtable(['015','086']) etc.
 def createtable(angles=['000','015','030','045','060',
                         '075','090','105','120','135',
-                        '150','165','180']
-               ):
+                        '150','165','180']):
 
-    #make table
-    header = np.array(['Angle', 'N_H1','N_H2','N_H3','Li_N','Li_H1','Li_H2'])
-    header = header.reshape(1,7) #otherwise get shape (,7). numpy's error
+    file_count = len(angles) #number of files
+
+    #1.Make A Blank Table
+    header = np.array(['Angle', 'N_H1','N_H2','N_H3','Li_N','Li_H1','Li_H2','Li_H3','A'])
+    header = header.reshape(1,9) #otherwise get shape (,9). numpy's error
+    #make a blank 'nan' row for each angle.
+    blankrows = np.full((file_count,9),np.nan)
+    MasterTable = np.append(header,blankrows,axis=0)
+    #!1
     
-    #generate table of correct length    
-    rowstoadd = len(angles)
-    #make blankrows
-    blankrows = np.full((rowstoadd,7),np.nan)
-    table = np.append(header,blankrows,axis=0)
 
-    #loops over filegrabber() for every file
-    for item in range(len(angles)):
-        g_row = item+1 #global row
-        table[(g_row),0] = angles[item]
-        current_file = filegrabberCIF(angles[item])
+    for item in range(file_count):
         
-        #make blank np arrays
-        AmmoniasH, AmmoniasN = np.zeros(0), np.zeros(0)
+        #2.Global Variables
+        current_file = filegrabberCIF(angles[item]) #grabs cif
+        current_row = item+1 #row number for current angle
+        MasterTable[(current_row),0] = angles[item] #Col0 = current Angle
+        #!2
 
-        #finds H in Ammonia
-        for H_idx in range(1,7):
-            Hrow = np.where(current_file[:,0]=='H%d' % H_idx)
-            AmmoniasH = np.append(AmmoniasH, current_file[Hrow])
-        
-        AmmoniasH = np.reshape(AmmoniasH,(-1,4))
+        #create blank arrays to populate
+        H_ammonia, N_ammonia = np.zeros(0), np.zeros(0)
 
-        if np.shape(AmmoniasH)[0] <3: #if less than 3 H atoms for NH3 in cif cell
-            if AmmoniasH[1,0]=='H2':
-                AmmoniasH = np.vstack((AmmoniasH,AmmoniasH[1,:]))
-            elif AmmoniasH[1,0]=='H3':
-                AmmoniasH = np.vstack((AmmoniasH[0,:],
-                                       AmmoniasH[1,:],
-                                       AmmoniasH[0,:],
-                                      ))
-        #print AmmoniasH
-        
-        
-        for N_idx in range(1,3):
-            Nrow = np.where(current_file[:,0]=='N%d' % N_idx)
-            AmmoniasN = np.append(AmmoniasN, current_file[Nrow])
-        
-        #!!!!!!!!!!!!!!!!!!!!LI!!!!!!!!!!!!!!
-        
-        #grab all Li atoms
-        #find Li with largest z
-        #locate rows containing substring 'Li'
-        li_substr = np.char.find(current_file[:,0],'Li')
-        #find Li index
-        Li_idx = np.where(li_substr ==0 )
-        first_row = np.min(Li_idx)
-        last_row = (np.max(Li_idx)) +1
-        #grab all Li
-        All_Li = current_file[first_row:last_row,:]
-      
-        All_Li = np.reshape(All_Li,(-1,4)) #code needed!
+        #3.Hydrogen in Ammonia
+        #find Ammonia's Hydrogens
+        for idxH in range(1,7): #(1,7) as only first 6H correspond to 2NH3, index of H
+            hydrogen = np.where(current_file[:,0]=='H%d' % idxH) #find hydrogens 1 to 6 in current_file
+            H_ammonia = np.append(H_ammonia, current_file[hydrogen])
+            H_ammonia = np.reshape(H_ammonia,(-1,4))
 
-        #np.append(All_Li,All_Li)
-        #b = All_Li[:,1:].astype(np.float)
-
-        #creating a table of inverted Li positions
-        invertedLixyz = 1 - (All_Li[:,1:].astype(np.float))
-        LiCol1 = All_Li[:,0].reshape(-1,1) #have to reshape!
+        #determine equivalent hydrogens
+        if np.shape(H_ammonia)[0] <3: #if less than 3H for ammonia in the CIF file, then some H must be equivalent
+            if H_ammonia[1,0]=='H2': #then N--H2 and N--H3 are equiv.
+                H_ammonia = np.vstack((H_ammonia,H_ammonia[1,:]))
+            elif H_ammonia[1,0]=='H3': #then N--H1 and N--H2 are equiv.
+                H_ammonia = np.vstack((H_ammonia[0,:],H_ammonia[1,:],H_ammonia[0,:]))
+        #!3
         
-        invertedLi = np.hstack((LiCol1,invertedLixyz))
         
-        #stack Li and Li Inverted
-        All_Li = np.vstack((All_Li,invertedLi))
+        #4.Nitrogen in Ammonia
+        for idxN in range(1,3):#(1,3) as 2N at most 
+            nitrogen = np.where(current_file[:,0]=='N%d' % idxN)
+            N_ammonia = np.append(N_ammonia, current_file[nitrogen])
+            N_ammonia = np.reshape(N_ammonia,(-1,4))
+        #!4
+        
+        #5.Find LithiumBelowAmmonia. *Assumption made that LithiumBelowAmmonia has the largest z-value of all the Lithiums.
+        #find Li in current_file by locating rows containing substring 'Li'
+        Li_substr = np.char.find(current_file[:,0],'Li') #returns 0 for rows containing 'Li'
+        Lithium_rows = np.where(Li_substr ==0 ) #finds all 0 corresponding to 'Li'      
+        LiFirstRow = np.min(Lithium_rows)
+        LiLastRow = np.max(Lithium_rows) + 1
+        
+        #from current_file take lithium rows only
+        Lithium = current_file[LiFirstRow:LiLastRow,:]
+        Lithium = np.reshape(Lithium,(-1,4))
+        
+        #CIF FILE --> to find Lithium atom furthest from surface need to also check inverted positions because its a cif file
+        InvLithium = 1 - (Lithium[:,1:].astype(np.float)) #inverting XYZ coordinates and not column idx
+        InvLithium = np.hstack(((Lithium[:,0].reshape(-1,1)),
+                                InvLithium)) #stack index column to inverted XYZ columns
 
-        """code for finding Li with largest Z component"""
-        ZLi = All_Li[:,3].astype(float) 
-        #find idx of Li with greatest z value, i.e LibelowN
-        findLirow = np.where(ZLi == np.max(ZLi))
-        LiBelowAmmonia = All_Li[findLirow,:]
-        LiBelowAmmonia = np.reshape(LiBelowAmmonia, (-1,4))
+        #Stack ALL Lithiums
+        LithiumStack = np.vstack((Lithium,InvLithium))
+        #find Lithium Atom with largest z value
+        LithiumZStack = LithiumStack[:,3].astype(float) #z col. only
+        #find row with largest z-value from LithiumZStack
+        LithiumBelowAmmonia = LithiumStack[np.where(LithiumZStack == np.max(LithiumZStack)),:]       
+        LithiumBelowAmmonia = np.reshape(LithiumBelowAmmonia, (-1,4))
 
         """
-        #manually overide LiAtom Position for 4Ang and 5 Ang
-        findLirow = np.where(All_Li =='Li16')[0]
-        LiBelowAmmonia = All_Li[findLirow,:]
+        #Manually overide LithiumBelowAmmonia Position for 5 Ang calc
+        findLirow = np.where(Lithium =='Li16')[0]
+        LithiumBelowAmmonia = Lithium[findLirow,:]
         """
+        #!5
 
-        #reshape
-        AmmoniasN = np.reshape(AmmoniasN,(-1,4))
-
-        #remove indx and convert to float
-        AmmoniasH = AmmoniasH[:,1:].astype(float)
-        AmmoniasN = AmmoniasN[:,1:].astype(float) 
-        LiBelowAmmonia = LiBelowAmmonia[:,1:].astype(float)
-
-        #ensures that Li and N atoms are on the sameside
-        #Li determined to be on the otherside to N if Li--N distance is > ~13Ang 
-        if abs(LiBelowAmmonia[0,2]-AmmoniasN[0,2]) > 0.3:
-            LiBelowAmmonia = 1 - LiBelowAmmonia
-        #print LiBelowAmmonia
-
+        #6.Convert rows of hydrogen, nitrogen and lithium selected from current_file into a usable format
+        #remove index and convert to float
+        N_ammonia = N_ammonia[:,1:].astype(float) 
+        H_ammonia = H_ammonia[:,1:].astype(float)     
+        LithiumBelowAmmonia = LithiumBelowAmmonia[:,1:].astype(float)
+ 
+        #convert frac_coord to absolute positions
+        H_ammonia[:,:2] *= ab
+        H_ammonia[:,2] *= c
+        N_ammonia[:,:2] *= ab
+        N_ammonia[:,2] *= c
+        LithiumBelowAmmonia[:,:2] *=ab
+        LithiumBelowAmmonia[:,2] *=c
+        #!6
         
-        #convert fraccoord to absolute positions
-        AmmoniasH[:,:2] *= ab
-        AmmoniasN[:,:2] *= ab
-        LiBelowAmmonia[:,:2] *=ab
+        #7.Number of rows
+        H_rows = np.shape(H_ammonia)[0]
+        N_rows = np.shape(N_ammonia)[0]
+        Li_rows = np.shape(LithiumBelowAmmonia)[0]
+        #!7
 
-        AmmoniasH[:,2] *= c
-        AmmoniasN[:,2] *= c
-        LiBelowAmmonia[:,2] *=c
-
-
-        #calc num_rows
-        num_Hrows = np.shape(AmmoniasH)[0]
-        num_Nrows = np.shape(AmmoniasN)[0]
-        num_Lirows = np.shape(LiBelowAmmonia)[0]
-
-        #SYMMETRYCHECKER
-        if num_Hrows >3 or num_Nrows >1 or num_Lirows > 1:
+        #8.Internal SymmetryCheck
+        #if too many rows then symmetry has failed
+        if H_rows >3 or N_rows >1 or Li_rows > 1:
             return 'InvSymm Failed'
-        #SYMMETRYCHECKER
+        #!8
         
-        #Ammonia Bond Length
-        #grab coordinates of each ammonia in turn
-        for row in range(num_Hrows):
-            AmmoniaBL = np.sqrt(np.sum( ((AmmoniasH[row] - AmmoniasN)**2)  ,axis=1))
-            #print 'N--H%d = ' % (row +1)
-            #print AmmoniaBL
-            table[g_row,(row+1)] = float(AmmoniaBL)
-        #Ammonia Bond Length
+        #9.Calculate Bond Lengths
+        #bond lengths involving hydrogen, iterating over 3H
+        for i in range(H_rows):
+            #nitrogen-hydrogen bond length
+            AmmoniaBL = np.sqrt(np.sum( ((H_ammonia[i] - N_ammonia)**2), axis=1)) #i here is row
+            #lithium-hydrogen bond length
+            Li__H3N_BL = np.sqrt(np.sum( ((H_ammonia[i] - LithiumBelowAmmonia)**2), axis=1))
+            
+            #add to table
+            MasterTable[current_row,(i+1)] = float(AmmoniaBL)
+            MasterTable[current_row,(i+5)] = float(Li__H3N_BL) #i+5 is column
     
-        #Lithium nitrogen Bond Length
-        LiN_BL = np.sqrt(np.sum( ((AmmoniasN - LiBelowAmmonia)**2)))
-        #print 'Li--N=' + str(LiN_BL)
-        table[g_row, 4] = float(LiN_BL)
+        #lithium-nitrogen bond length
+        LiN_BL = np.sqrt(np.sum( ((N_ammonia - LithiumBelowAmmonia)**2)))
+        MasterTable[current_row, 4] = float(LiN_BL)
+        #!9
     
-    print table
-    
-
-def Li_H3N_BL(AmmoniasH, LiBelowAmmonia,num_Hrows):
-    for rows in range(num_Hrows):
-        d = np.sqrt(np.sum( ((AmmoniasH[rows] - LiBelowAmmonia)**2)  ,axis=1))
-        print 'Li--H%d = ' % (rows +1)
-        print d
+    return MasterTable[1:,:]
