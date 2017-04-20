@@ -2,10 +2,14 @@ import pandas as pd
 import numpy as np
 import linecache
 
+#fname use %s
+fname = 'GOPT_L-BFGS_LiH33_%sLAYrepresenting11LAY_wFixedBottom_750eV_kpn551_28AngBox_dipolecorr_NH3at2.8Ang_000deg.castep'
+#fname = 'GOPT_L-BFGS_LiH33_6LAYrepresenting11LAY_wFixedBottom_fromGOPTLiHv2_600eV_kpn551_NoSymmGen_12AngV_0.02evang.castep'
+#fname = 'GOPT_L-BFGS_LiH33_11LAYERS_wFixedBulk_fromGOPTLiHv2_600eV_kpn551_44AngV_SYMMGEN_0.02ft.castep'
+#fname = 'GOPT_L-BFGS_LiH33_6LAYrepresenting11LAY_wFixedBottom_fromGOPTLiHv2_600eV_kpn551_NoSymmGen_12AngV_2FixedLays.castep'
 
 def infile(layerno):
-   
-    castepf = 'GOPT_L-BFGS_LiH33_11LAY_750eV_kpn551_wFixedBulk_44AngBox_SymmGen_w2NH3at_3AngfromSurf_150deg.castep'
+    castepf = fname %layerno
 
     #locates line of geom0 in castepfile
     with open(castepf, 'r') as myfile:
@@ -28,8 +32,7 @@ def infile(layerno):
     return data_list
 
 def outfile(layerno):
-
-    castepf = 'GOPT_L-BFGS_LiH33_11LAY_750eV_kpn551_wFixedBulk_44AngBox_SymmGen_w2NH3at_3AngfromSurf_150deg.castep'
+    castepf = fname %layerno
 
     #locates line of geom1 in castepfile
     with open(castepf, 'r') as myfile:
@@ -51,10 +54,50 @@ def outfile(layerno):
         
     return data_list
 
-#calculate total atomic displacement in layers
-def tot_atomic_disp_calc(layerno,Ammonia=True):
-    if Ammonia==True: print "add number of NH3 atoms(6) to layers?"
+def halfcelldisp():
+    layerno = 6 #as halfcell of 11L LiH
+    ab = 12.0251939
+    c = 28.0210306
+    #grab start and end configs.
+    geom0 = np.array(infile(layerno))
+    geom1 = np.array(outfile(layerno))
     
+    #identifier contains element and indexes
+    id = geom0[:,:2]
+   
+    #combine geom0 and geom geom1 into a single table only for sorting
+    botharr = np.column_stack((id,geom0[:,2:],geom1[:,2:]))
+    botharr = botharr[botharr[:,4].argsort()] #crudely sort by the z column of geom0
+    
+    #having sorted the table seperate components 
+    sortedid = botharr[:,:2]
+    sortedgeom0 = botharr[:,2:5].astype(float)
+    sortedgeom1 = botharr[:,5:8].astype(float)
+    
+    #have to sort order then convert factional coordinates to absolute positions. argsort bug.    
+    sortedgeom0[:,:2] *=ab
+    sortedgeom0[:,2] *= c
+    sortedgeom1[:,:2] *= ab
+    sortedgeom1[:,2] *=c
+
+    AtomicDisp = np.sqrt(np.sum(((sortedgeom1-sortedgeom0)**2),axis=1 )) #axis=1 as summing across each row 
+    #use sign of z delta to give indication of the direction atoms move in
+    z_sign = np.sign(sortedgeom1[:,2] - sortedgeom0[:,2]) 
+    AtomicDisp = np.column_stack((sortedid,AtomicDisp,z_sign))
+    
+    #make seperate numpy tables for Elements 
+    #locate index of row containing substring for element
+    LiRows = np.where(AtomicDisp[:,0]=='Li') #finds all rows where first column contains 'Li'      
+    Lithium = AtomicDisp[LiRows,:]  #grab rows using index
+    #combining two lines above 
+    Hydrogen = AtomicDisp[(np.where(AtomicDisp[:,0]=='H')),:]      
+
+    print Lithium
+    print Hydrogen
+
+
+#Calculates average LiH atomic displacement per layer.
+def LiH_rippling(layerno):
     geom0 = pd.DataFrame((infile(layerno)),
             columns=['Element','ionNumber','u','v','w'])
 
@@ -145,7 +188,7 @@ def tot_atomic_disp_calc(layerno,Ammonia=True):
     #wholecell
     #c = 32.0420257
     #44Ang box
-    c = 44.0420257
+    #c = 44.0420257
     
     tot_w_geomdiff_avg = tot_w_geomdiff_avg * c
     
@@ -259,7 +302,7 @@ def plot2d(inital_lay,final_lay,interval=1):
     for lay in range(inital_lay,final_lay+1,interval):
         #!
         #Y = atomic_disp_calc(lay,'Li')
-        Y = tot_atomic_disp_calc(lay)
+        Y = LiH_rippling(lay)
         
         no_of_lay = (len(Y))
         if (no_of_lay % 2) == 0:
@@ -290,7 +333,9 @@ def plot2d(inital_lay,final_lay,interval=1):
     plt.axis([-0.1,6.1,-0.001,0.08])#x_start,x_stop,y_start,y_stop
     plt.legend(loc=1,fontsize=20)
     plt.show()
-
+    
+    #custom_xticks = ['+5','+4','+3','+2','+1','0','-1','-2','-3','-4','-5']
+    #plt.xticks(data[:,0],custom_xticks,fontsize=14)
 
 def plot3darrows(layerno):
     from mayavi.mlab import *
@@ -336,43 +381,3 @@ def plot3darrows(layerno):
                  color=(0,0,1),resolution='32',
                  scale_factor=.02
                 )
-    
-def alternativeplot2d(inital_lay,final_lay,interval=1):
-    
-    colors = (
-            '#ff0000','#ffbf00','#ffff00',
-            '#80ff00','#000000','#00ffff',
-            '#0000ff','#8000ff','#ff00ff',
-            '#ff0000','#ffbf00','#ffff00',
-            '#80ff00','#000000','#00ffff',
-            '#0000ff','#8000ff','#ff00ff'
-            )
-             
-    for lay in range(inital_lay,final_lay +1,interval):
-        Y = tot_atomic_disp_calc(lay)
-
-        no_of_lay = len(Y)
-        
-        #calculate X
-        Xstart = (-no_of_lay/2.0) + 0.5
-        Xend = (no_of_lay/2.0) -0.5
-        #numpy array used as X axis has floats so can't use range()
-        X = np.arange(Xstart,Xend+1,1)
-        
-        plt.plot(X,np.log10(Y),
-                linestyle='-',
-                marker='o',
-                ms=7,
-                color=colors[(lay-2)],
-                label = str(lay) +'L'
-                )
-        
-    plt.grid(True)
-    plt.xlabel('Number of layers from centre',fontsize=16)
-    plt.ylabel('log10(LiHDeltas)',fontsize=16)
-    plt.axis([-5,5,-5.5,-1.0])
-    plt.legend(loc=4, fontsize=16)
-    plt.show()
-
-    #custom_xticks = ['+5','+4','+3','+2','+1','0','-1','-2','-3','-4','-5']
-    #plt.xticks(data[:,0],custom_xticks,fontsize=14)
