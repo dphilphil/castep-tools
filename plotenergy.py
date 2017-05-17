@@ -1,8 +1,8 @@
 import numpy as np
-import sys
+import os
 
 #usr input
-castepf = 'xx.castep'
+castepf = 'GOPT_L-BFGS_LiH33_7LAYrepresenting13LAY_wFixed2BottomLays_750eV_kpn551_30AngBox_dipolecorr_NH3startingat2.3_000deg.castep'
 li_atom = '59' #Li below ammonia
 ab = 12.0251939
 c = 30.0251951
@@ -58,4 +58,8 @@ lenbond = np.delete(lenbond,-1,axis=0)
 
 #outfil
 outstack = np.column_stack((energies,lenbond))
-np.savetxt('energy-vs-lithium-ammonia-dist.txt',outstack,fmt='%s',delimiter='\t')
+
+basename = str(os.path.splitext(castepf)[0])
+fname = 'Energy-v-lithium-ammonia-dist_' + basename + '.txt'
+
+np.savetxt(fname,outstack,fmt='%s',header='Energy/eV \tLiN bondleng/Ang',delimiter='\t')
