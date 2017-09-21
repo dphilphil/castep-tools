@@ -1,3 +1,14 @@
+"""   
+/   ******************************************************** 
+    *                                                      *        
+    * Metal Hydride ADC Rev 1				               *   
+    * Author:  Phillip Marks                               *   
+    * Date:    20-09-2017                                  *     
+    * Source:  https://github.com/dphilphil/castepy/       *   
+    *                                                      *   
+    ********************************************************  /  
+"""
+
 import pandas as pd
 import numpy as np
 import linecache
